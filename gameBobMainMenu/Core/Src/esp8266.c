@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include "extraTools.h"
 
 
 CmdType cmd_type = DEFAULT;
@@ -152,8 +153,10 @@ uint8_t Esp8266_SendIpCommand(char *cmd){
 	uint16_t cmd_length = strlen(cmd);
 	reset_flags();
 	cmd_type = IP_SEND;
+	char cmd_length_str[4];
 	char command[50];
-	sprintf(command,"AT+CIPSEND=%d\r\n",cmd_length);
+	intToString(cmd_length, cmd_length_str, 50);
+	sprintf(command,"AT+CIPSEND=%s\r\n",cmd_length_str);
 	uint8_t result = sendAndReceive(command);
 	if(result == ESP8266_OK){
 		reset_flags();

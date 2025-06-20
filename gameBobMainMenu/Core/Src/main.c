@@ -33,6 +33,8 @@
 #include "main_menu.h"
 #include "esp8266.h"
 #include "WiFiConnection.h"
+#include <inttypes.h>
+#include "extraTools.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -127,6 +129,8 @@ static uint8_t connectToWiFi();
 static uint8_t getGameList(char *ret_buffer, size_t size );
 static uint8_t downloadGame();
 static int findDataBlockEnd(int offset);
+
+
 
 //uGUI
 
@@ -573,6 +577,9 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
+
+
+
 void ADC_SetActiveChannel(ADC_HandleTypeDef *hadc, uint32_t AdcChannel)
 {
   ADC_ChannelConfTypeDef sConfig = {0};
@@ -741,6 +748,7 @@ static uint8_t connectToWiFi(){
 static uint8_t getGameList(char *ret_buffer, size_t size ){
 	char cmd[60];
 	char server[] = "172.20.10.4";
+
 	sprintf(cmd, "GET /gameList.txt HTTP/1.1\r\nHost: %s\r\n\r\n", server);
 	uint8_t esp8266_ret = Esp8266_SendIpCommand(cmd);
 	if(esp8266_ret != ESP8266_OK){
@@ -794,40 +802,53 @@ static uint8_t downloadGame(){
 	char server[] = "172.20.10.4";
 	char port[] = "5000";
 	uint8_t esp8266_ret;
-	esp8266_ret = Esp8266_StartTCPIPConnection(server, port);
+	HAL_StatusTypeDef status;
 
-	uint8_t retry_counter = 1;
+	int loop_index=0;
+	const char *key = "\r\n+IPD,";
+	const char *key_start;
+	int key_index = 0;
+	int key_start_index;
+	int data_block_end;
+	uint8_t found_colon_flag;
+	uint8_t retry_counter;
+
+	uint32_t received_byte;
+	uint32_t byte_to_flash = 0;
+	uint32_t address = FLASH_GAME_START_ADDR;
+	int byte_counter = 0;
+
+
+
+
+	char cmd[60];
+	char part_str[3];
+	//char server[] = "172.20.10.4";
+	int part = 1;
+
+	status = eraseOldGame();
+	if(status!=HAL_OK){
+		return ESP8266_ERROR;
+	}
+	while(part<=13){
+	esp8266_ret = Esp8266_StartTCPIPConnection(server, port);
+	retry_counter = 1;
 	while(esp8266_ret == ESP8266_ERROR && retry_counter < 3){
 		esp8266_ret = Esp8266_StartTCPIPConnection(server, port);
 		retry_counter++;
 	}
-	char cmd[60];
-	//char server[] = "172.20.10.4";
-	sprintf(cmd, "GET /test1.bin HTTP/1.1\r\nHost: %s\r\n\r\n", server);
+	intToString(part, part_str, 3);
+	key_index = 0;
+	loop_index = 0;
+	sprintf(cmd, "GET /pong_part%s.bin HTTP/1.1\r\nHost: %s\r\n\r\n", part_str, server);
 	esp8266_ret = Esp8266_SendIpCommand(cmd);
 	if(esp8266_ret != ESP8266_OK){
 		return esp8266_ret;
 	}
 
 	/* Interpret data from server */
-	HAL_StatusTypeDef status;
-	status = eraseOldGame();
-	if(status!=HAL_OK){
-		return ESP8266_ERROR;
-	}
-	int loop_index=0;
-	const char *key = "+IPD,";
-	const char *key_start;
-	int key_index = 0;
-	int key_start_index;
-	int data_block_end;
-	uint8_t found_colon_flag = 0;
-
-	uint32_t received_byte;
-	uint32_t byte_to_flash = 0;
-	uint32_t address = FLASH_GAME_START_ADDR;
-	int byte_counter = 0;
 	do{
+
 		key_start_index = find_str((char*)rx_buffer+key_index, key, strlen(key));
 		key_start = (char*)rx_buffer + key_start_index;
 		if(key_start_index!=-1){
@@ -840,6 +861,7 @@ static uint8_t downloadGame(){
 				if(data_block_end==-1){//error in communication
 					return ESP8266_ERROR;
 				}
+				found_colon_flag = 0;
 				for(int i=key_index;i<data_block_end;i++){
 					if(!found_colon_flag){
 						if(rx_buffer[i] == ':'){
@@ -855,6 +877,9 @@ static uint8_t downloadGame(){
 							status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, address, byte_to_flash);
 							address+=4;
 							byte_to_flash = 0;
+							if(address == 0x080105B0){
+								address = address;
+							}
 
 						}
 						else{
@@ -870,6 +895,8 @@ static uint8_t downloadGame(){
 		}
 		
 	}while(key_start_index!=-1);
+	part++;
+	}
 	status = HAL_FLASH_Lock();
 	
 	return esp8266_ret;
@@ -877,7 +904,7 @@ static uint8_t downloadGame(){
 
 
 static int findDataBlockEnd(int offset){
-	const char *key = "+IPD,";
+	const char *key = "\r\n+IPD,";
 	int block_end = 0;
 	int next_key_index;
 	//const char *next_key = strstr((char*)rx_buffer+offset,key);
