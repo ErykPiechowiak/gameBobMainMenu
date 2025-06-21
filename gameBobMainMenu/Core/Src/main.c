@@ -121,6 +121,8 @@ static void drawSelectGameScreen();
 static void selectGameScreenLogic();
 static void drawFailureScreen();
 static void updateSelectedGame(uint8_t hightlighted_game);
+static void updateDownloadProgress(char *part, char *nr_of_parts);
+static void clearScreen();
 
 
 //WiFi CONNECTION RELATED FUNCTIONS
@@ -193,30 +195,9 @@ int main(void)
   LCD_init();
   initUserInput(&uInput);
 
-/*
-  size_t output_size = 50;
-  char output[output_size];
-  char ssid[30];
-  char psw[30];
-  char server[] = "172.20.10.4";
-  char port[] = "5000";
-  char cmd[60];
-  sprintf(cmd, "GET /gameBob.bin HTTP/1.1\r\nHost: @s\r\n\r\n",server);
-  uint8_t result = Esp8266_Init(&huart3);
-  result = Esp8266_SetCwMode(1);
-  //result = Esp8266_ChangeBaudRate(9600, 8, 1, 0, 0);
-//  result = Esp8266_ListAP(output);
-  result = Esp8266_ConnectAP(ssid, psw);
-  //result = Esp8266_GetIpAddress(output, output_size);
-  result = Esp8266_StartTCPIPConnection(server, port);
-  result = Esp8266_SendIpCommand(cmd);
-*/
-
-
   xReturned = xTaskCreate(testTask, "task", 256, NULL, 1, NULL);
   xReturned = xTaskCreate(taskMainMenu,"taskMainMenu",256,NULL,3,&h_task_main_menu);
   xReturned = xTaskCreate(taskGetUserInput,"taskGetUserInput",256,NULL,2,NULL);
-  uint8_t temp = 0b00000001;
 
   //xReturned = xTaskCreate(taskGameLogic, "taskGameLogic", 512, NULL, 3, NULL);
   vTaskStartScheduler();
@@ -601,17 +582,6 @@ static void testTask( void *pvParameters ){
 	}
 }
 
-/*
-static void taskGameLogic(void *pvParameters){
-
-	initGame(h_task_main_menu,&htim1,uInput);
-	for(;;){
-		gameInput(uInput);
-		gameLogic();
-		vTaskDelay(33);
-	}
-}
-*/
 
 static void drawPic(PICTURE pic, uint16_t x, uint16_t y){
 	uint16_t start_x = x;
@@ -643,25 +613,26 @@ static void drawPic(PICTURE pic, uint16_t x, uint16_t y){
 
 
 static void drawFailureScreen(){
-	UG_FillScreen(C_WHITE);
+	//UG_FillScreen(C_WHITE);
+	//UG_FillFrame(0, 0, LCD_WIDTH, LCD_HEIGHT, C_WHITE);
+	clearScreen();
+	//UG_Update();
 	char text_buffer[30];
 	sprintf(text_buffer, "Failed. Press A to return");
 	LCD_PutStr(LCD_WIDTH / 2 - (10 * strlen(text_buffer) / 2),
 			LCD_HEIGHT / 2 - 8, text_buffer, FONT_10X16, C_BLACK, C_WHITE);
-	UG_Update();
+	//UG_Update();
 }
 
 static void drawSelectGameScreen(){
-	UG_FillScreen(C_WHITE);
-	UG_Update();
+	//UG_FillScreen(C_WHITE);
+	//UG_FillFrame(0, 0, LCD_WIDTH, LCD_HEIGHT, C_WHITE);
+	clearScreen();
 	char text_buffer[25];
 	sprintf(text_buffer, "Loading Game List...");
 	LCD_PutStr(LCD_WIDTH / 2 - (10 * strlen(text_buffer) / 2),
 			LCD_HEIGHT / 2 - 8, text_buffer, FONT_10X16, C_BLACK, C_WHITE);
-	UG_Update();
-
-	//size_t output_size = 512;
-	//char output[output_size];
+	//UG_Update();
 
 
 	uint8_t esp8266_ret;
@@ -684,9 +655,9 @@ static void drawSelectGameScreen(){
 		return;
 	}
 	else{
-		UG_FillScreen(C_WHITE);
-		HAL_Delay(100);
-		UG_Update();
+		//UG_FillScreen(C_WHITE);
+		//UG_FillFrame(0, 0, LCD_WIDTH, LCD_HEIGHT, C_WHITE);
+		clearScreen();
 		char *token = strtok(game_list," ");
 		//char temp_buff[100];
 		int i = 0;
@@ -721,11 +692,8 @@ static uint8_t initWiFi(){
 
 
 static uint8_t connectToWiFi(){
-	//char ssid[30]; //wifi ssid
-	//char psw[30]; //wifi password
 	char server[] = "172.20.10.4";
 	char port[] = "5000";
-
 
 	uint8_t esp8266_ret = Esp8266_ConnectAP(ssid, pwd); //ssid and pwd inside the WiFiConnection.h
 	if(esp8266_ret != ESP8266_OK){
@@ -755,10 +723,8 @@ static uint8_t getGameList(char *ret_buffer, size_t size ){
 		return esp8266_ret;
 	}
 	/* Interpret data from server */
-	//char *raw_data = strstr((char*)rx_buffer,"DATA START\r\n");
 	int data_start_index = find_str((char*)rx_buffer,"DATA START\r\n", strlen("DATA START\r\n"));
 	char *raw_data = (char*)rx_buffer + data_start_index;
-	//int nr_of_bytes = atoi(raw_data+4);
 	char game_list[128];
 	strcpy(game_list,raw_data);
 	char *token = strtok(game_list,"\r\n");
@@ -797,6 +763,18 @@ static HAL_StatusTypeDef eraseOldGame(){
 
 }
 
+static void updateDownloadProgress(char *part, char *nr_of_parts){
+	//UG_FillScreen(C_WHITE);
+	//UG_FillFrame(0, 0, LCD_WIDTH, LCD_HEIGHT, C_WHITE);
+	clearScreen();
+	LCD_PutStr(LCD_WIDTH / 2 - (10 * strlen("Downloading game...") / 2),
+			LCD_HEIGHT/4, "Downloading game...", FONT_10X16, C_BLACK, C_WHITE);
+	char text[10];
+	sprintf(text, "%s/%s",part,nr_of_parts);
+	LCD_PutStr(LCD_WIDTH / 2 - (10 * strlen(text) / 2),
+			LCD_HEIGHT/4+32, text, FONT_10X16, C_BLACK, C_WHITE);
+}
+
 static uint8_t downloadGame(){
 
 	char server[] = "172.20.10.4";
@@ -823,81 +801,101 @@ static uint8_t downloadGame(){
 
 	char cmd[60];
 	char part_str[3];
+	char nr_of_parts_str[3];
 	//char server[] = "172.20.10.4";
 	int part = 1;
-
+	int nr_of_parts = 13;
 	status = eraseOldGame();
 	if(status!=HAL_OK){
 		return ESP8266_ERROR;
 	}
-	while(part<=13){
-	esp8266_ret = Esp8266_StartTCPIPConnection(server, port);
-	retry_counter = 1;
-	while(esp8266_ret == ESP8266_ERROR && retry_counter < 3){
+	intToString(nr_of_parts, nr_of_parts_str, 3);
+	while(part<=nr_of_parts){
+
 		esp8266_ret = Esp8266_StartTCPIPConnection(server, port);
-		retry_counter++;
-	}
-	intToString(part, part_str, 3);
-	key_index = 0;
-	loop_index = 0;
-	sprintf(cmd, "GET /pong_part%s.bin HTTP/1.1\r\nHost: %s\r\n\r\n", part_str, server);
-	esp8266_ret = Esp8266_SendIpCommand(cmd);
-	if(esp8266_ret != ESP8266_OK){
-		return esp8266_ret;
-	}
+		retry_counter = 1;
+		while(esp8266_ret == ESP8266_ERROR && retry_counter < 3){
+			esp8266_ret = Esp8266_StartTCPIPConnection(server, port);
+			retry_counter++;
+		}
+		intToString(part, part_str, 3);
+		updateDownloadProgress(part_str, nr_of_parts_str);
+		key_index = 0;
+		loop_index = 0;
+		sprintf(cmd, "GET /pong_part%s.bin HTTP/1.1\r\nHost: %s\r\n\r\n", part_str, server);
+		esp8266_ret = Esp8266_SendIpCommand(cmd);
+		if(esp8266_ret != ESP8266_OK){
+			return esp8266_ret;
+		}
 
-	/* Interpret data from server */
-	do{
+		/* Interpret data from server */
+		do{
 
-		key_start_index = find_str((char*)rx_buffer+key_index, key, strlen(key));
-		key_start = (char*)rx_buffer + key_start_index;
-		if(key_start_index!=-1){
-			key_index = key_start - (char*)rx_buffer + 5; //+5 to skip +IPD: chars
-			if(loop_index == 0){ //skip first block of data (header etc...)
-				loop_index++;
-			}
-			else{
-				data_block_end = findDataBlockEnd(key_index);
-				if(data_block_end==-1){//error in communication
-					return ESP8266_ERROR;
+			key_start_index = find_str((char*)rx_buffer+key_index, key, strlen(key));
+			key_start = (char*)rx_buffer + key_start_index;
+			if(key_start_index!=-1){
+				key_index = key_start - (char*)rx_buffer + 5; //+5 to skip +IPD: chars
+				if(loop_index == 0){ //skip first block of data (header etc...)
+					loop_index++;
 				}
-				found_colon_flag = 0;
-				for(int i=key_index;i<data_block_end;i++){
-					if(!found_colon_flag){
-						if(rx_buffer[i] == ':'){
-							found_colon_flag = 1;
-						}
+				else{
+					data_block_end = findDataBlockEnd(key_index);
+					if(data_block_end==-1){//error in communication
+						return ESP8266_ERROR;
 					}
-					else{ //RECEIVED BYTE
-						received_byte = rx_buffer[i];
-						received_byte<<=8*byte_counter;
-						byte_to_flash |=received_byte;
-						if(byte_counter==3){//Whole word received - ready to flash
-							byte_counter = 0;
-							status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, address, byte_to_flash);
-							address+=4;
-							byte_to_flash = 0;
-							if(address == 0x080105B0){
-								address = address;
+					found_colon_flag = 0;
+					for(int i=key_index;i<data_block_end;i++){
+						if(!found_colon_flag){
+							if(rx_buffer[i] == ':'){
+								found_colon_flag = 1;
+							}
+						}
+						else{ //RECEIVED BYTE
+							received_byte = rx_buffer[i];
+							received_byte<<=8*byte_counter;
+							byte_to_flash |=received_byte;
+							if(byte_counter==3){//Whole word received - ready to flash
+								byte_counter = 0;
+								status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, address, byte_to_flash);
+								address+=4;
+								byte_to_flash = 0;
+								if(address == 0x080105B0){
+									address = address;
+								}
+
+							}
+							else{
+								byte_counter++;
 							}
 
 						}
-						else{
-							byte_counter++;
-						}
-
 					}
 				}
 			}
-		}
-		else{
-			break;
-		}
-		
-	}while(key_start_index!=-1);
-	part++;
+			else{
+				break;
+			}
+
+		}while(key_start_index!=-1);
+		part++;
 	}
 	status = HAL_FLASH_Lock();
+	if(part >= nr_of_parts){
+		//UG_FillScreen(C_WHITE);
+		//UG_FillFrame(0, 0, LCD_WIDTH, LCD_HEIGHT, C_WHITE);
+		//HAL_Delay(100);
+		clearScreen();
+		LCD_PutStr(LCD_WIDTH / 2 - (10 * strlen("Download OK") / 2),
+				LCD_HEIGHT/2, "Download OK", FONT_10X16, C_BLACK, C_WHITE);
+	}
+	else{
+		//UG_FillScreen(C_WHITE);
+		//UG_FillFrame(0, 0, LCD_WIDTH, LCD_HEIGHT, C_WHITE);
+		//HAL_Delay(100);
+		clearScreen();
+		LCD_PutStr(LCD_WIDTH / 2 - (10 * strlen("Download ERROR") / 2),
+				LCD_HEIGHT/2, "Download ERROR", FONT_10X16, C_BLACK, C_WHITE);
+	}
 	
 	return esp8266_ret;
 }
@@ -915,15 +913,8 @@ static int findDataBlockEnd(int offset){
 	}
 	else{
 		const char *end_key = "CLOSED";
-		//next_key = strstr((char*)rx_buffer+offset,end_key);
 		next_key_index = find_str((char*)rx_buffer+offset, end_key, strlen(end_key));
-		//next_key = (char*)rx_buffer+next_key_index;
 		return next_key_index;
-		//if(next_key){
-		//	return next_key - (char*)rx_buffer;
-		//}
-		//else
-		//	return -1;
 	}
 }
 
@@ -954,7 +945,8 @@ static void selectGameScreenLogic(){
 
 
 static void drawMainMenu(){
-	UG_FillScreen(C_WHITE);
+	clearScreen();
+	//UG_Update();
 	UG_FillFrame(0, 0, LCD_WIDTH, 30, C_PURPLE);
 	char text_buffer[25];
 	sprintf(text_buffer, "Welcome to GameBob!");
@@ -962,20 +954,20 @@ static void drawMainMenu(){
 	drawPic(play_game_pic,LCD_WIDTH/2-42, LCD_HEIGHT/2-62);
 	drawPic(load_game_pic, LCD_WIDTH/2-42, LCD_HEIGHT/2);
 	drawPic(power_off_pic, LCD_WIDTH/2-42, LCD_HEIGHT/2+62);
-	UG_Update();
+	//UG_Update();
 }
 
 
-
+static void clearScreen(){
+	for(int i=0;i<3;i++){
+		UG_FillScreen(C_WHITE);
+	}
+}
 
 
 static void mainMenuScreenLogic(){
 	if (selected_menu_option == PLAY_GAME && uInput.keyB == GPIO_PIN_RESET) {
 		bootGame();
-		//xReturned = xTaskCreate(taskGameLogic, "taskGameLogic", 512, NULL, 3, &h_task_game_logic);
-		//vTaskSuspend(NULL);
-		//drawMainMenu();
-		//updateSelectedOption(selected_menu_option);
 	}
 	if (selected_menu_option == SELECT_GAME && uInput.keyB == GPIO_PIN_RESET) {
 		screen = SELECT_GAME_SCREEN;
