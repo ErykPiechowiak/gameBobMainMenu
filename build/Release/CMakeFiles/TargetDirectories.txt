@@ -1,0 +1,6 @@
+D:/Programowanie/STM32_Code/gameBobMainMenu/build/Release/CMakeFiles/gameBobMainMenu.dir
+D:/Programowanie/STM32_Code/gameBobMainMenu/build/Release/CMakeFiles/edit_cache.dir
+D:/Programowanie/STM32_Code/gameBobMainMenu/build/Release/CMakeFiles/rebuild_cache.dir
+D:/Programowanie/STM32_Code/gameBobMainMenu/build/Release/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir
+D:/Programowanie/STM32_Code/gameBobMainMenu/build/Release/cmake/stm32cubemx/CMakeFiles/edit_cache.dir
+D:/Programowanie/STM32_Code/gameBobMainMenu/build/Release/cmake/stm32cubemx/CMakeFiles/rebuild_cache.dir
