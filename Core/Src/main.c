@@ -21,6 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "projdefs.h"
 #include "string.h"
 #include "stdio.h"
 #include "FreeRTOS.h"
@@ -704,6 +705,7 @@ static void drawSelectGameScreen(){
 
 static uint8_t initWiFi(){
 	HAL_GPIO_WritePin(ESP_EN_GPIO_Port, ESP_EN_Pin, GPIO_PIN_SET);
+	vTaskDelay(pdMS_TO_TICKS(1000));
 	uint8_t esp8266_ret = Esp8266_Init(&huart3);
 	if(esp8266_ret != ESP8266_OK){
 		return esp8266_ret;
@@ -1222,7 +1224,7 @@ void vApplicationGetIdleTaskMemory( StaticTask_t **ppxIdleTaskTCBBuffer, StackTy
 }
 
 static void powerOFF(){
-	deInitPeripherals();
+	//deInitPeripherals();
 	HAL_GPIO_WritePin(POWER_OFF_GPIO_Port, POWER_OFF_Pin, GPIO_PIN_SET);
 }
 
