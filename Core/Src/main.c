@@ -22,6 +22,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "projdefs.h"
+#include "stm32f1xx_hal_uart.h"
 #include "string.h"
 #include "stdio.h"
 #include "FreeRTOS.h"
@@ -201,6 +202,11 @@ int main(void)
   LCD_init();
   initUserInput(&uInput);
 
+  	#ifdef DEBUG_LOG
+		static char debug_output[50];
+		sprintf(debug_output,"TEST \n");
+		HAL_UART_Transmit_IT(&huart2, (uint8_t*)debug_output, strlen(debug_output));
+	#endif
   xReturned = xTaskCreate(testTask, "task", 256, NULL, 1, NULL);
   xReturned = xTaskCreate(taskMainMenu,"taskMainMenu",256,NULL,3,&h_task_main_menu);
   xReturned = xTaskCreate(taskGetUserInput,"taskGetUserInput",256,NULL,2,NULL);
@@ -728,7 +734,7 @@ static uint8_t connectToWiFi(){
 	}
 	//result = Esp8266_GetIpAddress(output, output_size);
 	esp8266_ret = Esp8266_StartTCPIPConnection(server, port);
-
+	vTaskDelay(pdMS_TO_TICKS(1000));
 	uint8_t retry_counter = 1;
 	while(esp8266_ret == ESP8266_ERROR && retry_counter < 3){
 		esp8266_ret = Esp8266_StartTCPIPConnection(server, port);
@@ -750,25 +756,63 @@ static uint8_t getGameList(char *ret_buffer, size_t size ){
 		return esp8266_ret;
 	}
 	/* Interpret data from server */
-	int data_start_index = find_str((char*)rx_buffer,"DATA START\r\n", strlen("DATA START\r\n"));
+	//#ifdef DEBUG_LOG
+	//	sprintf(debug_output,"Finding index \n");
+	//	HAL_UART_Transmit_IT(&huart2, (uint8_t*)debug_output, strlen(debug_output));
+	//#endif
+
+	int data_start_index = find_str((char*)rx_buffer,"DATA START\n", strlen("DATA START\n"));
+
+	#ifdef DEBUG_LOG
+		static char debug_output[50];
+		sprintf(debug_output,"Found index %d",data_start_index);
+		HAL_UART_Transmit_IT(&huart2, (uint8_t*)debug_output, strlen(debug_output));
+		vTaskDelay(pdMS_TO_TICKS(1000));
+	#endif
+
 	char *raw_data = (char*)rx_buffer + data_start_index;
 	char game_list[128];
 	strcpy(game_list,raw_data);
-	char *token = strtok(game_list,"\r\n");
-	char temp_buff[100];
+	char *token = strtok(game_list,"\n");
+	char temp_buff[100]={0};
 	while(token){
-		token = strtok(NULL,"\r\n");
-		if(strlen(token)<100-strlen(temp_buff) && strstr(token,"DATA STOP") == NULL){
+		#ifdef DEBUG_LOG
+			HAL_UART_Transmit_IT(&huart2, (uint8_t*)token, strlen(token));
+			vTaskDelay(pdMS_TO_TICKS(1000));
+			HAL_UART_Transmit_IT(&huart2, (uint8_t*)"\n", strlen("\n"));
+			vTaskDelay(pdMS_TO_TICKS(100));
+		#endif
+
+		token = strtok(NULL,"\n");
+		if(token == NULL || strstr(token,"STOP") != NULL)
+			break;
+
+		//if(strlen(token)<100-strlen(temp_buff) && find_str(token, "DATA STOP", strlen("DATA STOP"))){
+
+		if(strlen(token)<100-strlen(temp_buff)){// && strstr(token,"STOP") == NULL){
+
 			strcat(temp_buff,token);
 			strcat(temp_buff," ");
+			//	#ifdef DEBUG_LOG
+			//	HAL_UART_Transmit_IT(&huart2, (uint8_t*)temp_buff, strlen(temp_buff));
+			//	vTaskDelay(pdMS_TO_TICKS(1000));
+			//#endif
 		}
 	}
+		#ifdef DEBUG_LOG
+			HAL_UART_Transmit_IT(&huart2, (uint8_t*)"While End \n", strlen("While End \n"));
+			vTaskDelay(pdMS_TO_TICKS(1000));
+		#endif
 	if(strlen(temp_buff)<size){
 		strcpy(ret_buffer, temp_buff);
 	}
 	else{
 		strcpy(ret_buffer, "ERROR");
 	}
+	#ifdef DEBUG_LOG
+		HAL_UART_Transmit_IT(&huart2, (uint8_t*)ret_buffer, strlen(ret_buffer));
+		vTaskDelay(pdMS_TO_TICKS(1000));
+	#endif
 	return esp8266_ret;
 
 }
@@ -849,7 +893,7 @@ static uint8_t downloadGame(){
 		updateDownloadProgress(part_str, nr_of_parts_str);
 		key_index = 0;
 		loop_index = 0;
-		sprintf(cmd, "GET /pong_part%s.bin HTTP/1.1\r\nHost: %s\r\n\r\n", part_str, server);
+		sprintf(cmd, "GET /gameBobPong/pong_part%s.bin HTTP/1.1\r\nHost: %s\r\n\r\n", part_str, server);
 		esp8266_ret = Esp8266_SendIpCommand(cmd);
 		if(esp8266_ret != ESP8266_OK){
 			return esp8266_ret;

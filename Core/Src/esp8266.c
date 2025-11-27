@@ -18,6 +18,11 @@ volatile uint16_t rx_index;
 volatile uint8_t tx_completed_flag;
 volatile uint8_t found_flag;
 
+
+
+
+
+
 UART_HandleTypeDef *huart_esp = NULL;
 
 

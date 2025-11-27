@@ -18,6 +18,8 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Debug")
 endif()
 
+
+
 # Set the project name
 set(CMAKE_PROJECT_NAME gameBobMainMenu)
 
