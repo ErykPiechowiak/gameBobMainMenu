@@ -100,8 +100,8 @@ void Error_Handler(void);
 #define LCD_CS_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
-#define DEBUG_LOG 
-
+//#define DEBUG_LOG 
+#define ADDR_GAME_ID          (*(uint32_t*)0x0801FFFC) /* GAME ID */
 
 #define ADDR_FLASH_PAGE_0     ((uint32_t)0x08000000) /* Base @ of Page 0, 1 Kbytes */
 #define ADDR_FLASH_PAGE_1     ((uint32_t)0x08000400) /* Base @ of Page 1, 1 Kbytes */
