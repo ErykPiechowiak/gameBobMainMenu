@@ -36,6 +36,7 @@
 #include "esp8266.h"
 #include "WiFiConnection.h"
 #include <inttypes.h>
+#include <stdlib.h>
 #include "extraTools.h"
 /* USER CODE END Includes */
 
@@ -51,6 +52,9 @@
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
+#define MAX_GAMES 5
+#define MAX_GAME_NAME 10
+
 #define DEFAULT_FONT FONT_6X8
 #define TIM_FREQ 64000000
 #define MAX_OBJECTS 10 //uGUI
@@ -84,6 +88,7 @@ static StackType_t xIdleStack[configMINIMAL_STACK_SIZE];
 /*SELECT GAME VARIABLES */
 static uint8_t nr_of_games = 0;
 static uint8_t selected_game = 0;
+static char games[MAX_GAMES][MAX_GAME_NAME];
 
 /* UART BUFFER */
 
@@ -119,6 +124,7 @@ static void powerOFF();
 
 //FLASHING RELATED FUNCTIONS
 static HAL_StatusTypeDef eraseOldGame();
+static uint8_t checkCurrentGame(uint32_t _game_id);
 
 //SCREEN RELATED FUNCTIONS
 static void drawMainMenu();
@@ -136,6 +142,7 @@ static uint8_t initWiFi();
 static uint8_t connectToWiFi();
 static uint8_t getGameList(char *ret_buffer, size_t size );
 static uint8_t downloadGame();
+static uint8_t getGameInfo(uint8_t _selected_game, uint32_t *_game_id, int *_number_of_parts);
 static int findDataBlockEnd(int offset);
 
 
@@ -686,13 +693,13 @@ static void drawSelectGameScreen(){
 		return;
 	}
 	else{
-		//UG_FillScreen(C_WHITE);
-		//UG_FillFrame(0, 0, LCD_WIDTH, LCD_HEIGHT, C_WHITE);
+
 		clearScreen();
 		char *token = strtok(game_list," ");
 		//char temp_buff[100];
 		int i = 0;
 		while(token){
+			strcpy(games[nr_of_games], token); //save game name
 			nr_of_games++;
 			LCD_PutStr(LCD_WIDTH / 2 - (16 * strlen(token) / 2),
 					26+i, token, FONT_16X26, C_BLACK, C_WHITE);
@@ -817,6 +824,15 @@ static uint8_t getGameList(char *ret_buffer, size_t size ){
 
 }
 
+/* Check if the game in the flash has the same game ID*/
+static uint8_t checkCurrentGame(uint32_t _game_id){
+	if(_game_id == ADDR_GAME_ID){
+		return 1;
+	}
+	else{
+		return 0;
+	}
+}
 
 static HAL_StatusTypeDef eraseOldGame(){
 	HAL_StatusTypeDef status;
@@ -846,6 +862,47 @@ static void updateDownloadProgress(char *part, char *nr_of_parts){
 			LCD_HEIGHT/4+32, text, FONT_10X16, C_BLACK, C_WHITE);
 }
 
+/* Get info about game ID and number of parts to download*/
+static uint8_t  getGameInfo(uint8_t _selected_game, uint32_t *_game_id, int *_number_of_parts){
+	char cmd[60];
+	char server[] = "172.20.10.4";
+	char port[] = "5000";
+
+	uint8_t esp8266_ret = Esp8266_StartTCPIPConnection(server, port);
+	vTaskDelay(pdMS_TO_TICKS(1000));
+
+	sprintf(cmd, "GET /%s_info.txt HTTP/1.1\r\nHost: %s\r\n\r\n", games[_selected_game],server);
+	esp8266_ret = Esp8266_SendIpCommand(cmd);
+	if(esp8266_ret != ESP8266_OK){
+		return esp8266_ret;
+	}
+	/* TODO: check if 404*/
+
+	int data_start_index = find_str((char*)rx_buffer,"DATA START\n", strlen("DATA START\n"));
+
+	char *raw_data = (char*)rx_buffer + data_start_index;
+	char game_info[64];
+	strcpy(game_info,raw_data);
+	char *token = strtok(game_info,"\n");
+	char temp_buff[64]={0};
+	int i = 0;
+	while(token){
+		token = strtok(NULL,"\n"); //Skip data start
+		if(token == NULL || strstr(token,"STOP") != NULL) 
+			break;
+		if(i ==0)
+			*_game_id = atoi(token);
+		else{
+			*_number_of_parts = atoi(token);
+			break;
+		}
+		i++;
+
+	}
+	return 0;
+}
+
+
 static uint8_t downloadGame(){
 
 	char server[] = "172.20.10.4";
@@ -867,15 +924,21 @@ static uint8_t downloadGame(){
 	uint32_t address = FLASH_GAME_START_ADDR;
 	int byte_counter = 0;
 
-
-
-
 	char cmd[60];
 	char part_str[3];
+	int nr_of_parts = 0;
 	char nr_of_parts_str[3];
-	//char server[] = "172.20.10.4";
+	uint32_t game_id;
 	int part = 1;
-	int nr_of_parts = 13;
+
+	//char server[] = "172.20.10.4";
+	getGameInfo(selected_game, &game_id, &nr_of_parts); //Ask server about game id and number of parts to download
+	if(checkCurrentGame(game_id)){
+		LCD_PutStr(LCD_WIDTH / 2 - (10 * strlen("Game is in memory") / 2),
+			LCD_HEIGHT/2, "Game is in memory", FONT_10X16, C_BLACK, C_WHITE);
+			return 0;
+	}
+	
 	status = eraseOldGame();
 	if(status!=HAL_OK){
 		return ESP8266_ERROR;
@@ -893,7 +956,7 @@ static uint8_t downloadGame(){
 		updateDownloadProgress(part_str, nr_of_parts_str);
 		key_index = 0;
 		loop_index = 0;
-		sprintf(cmd, "GET /gameBobPong/pong_part%s.bin HTTP/1.1\r\nHost: %s\r\n\r\n", part_str, server);
+		sprintf(cmd, "GET /gameBobpong/pong_part%s.bin HTTP/1.1\r\nHost: %s\r\n\r\n", part_str, server);
 		esp8266_ret = Esp8266_SendIpCommand(cmd);
 		if(esp8266_ret != ESP8266_OK){
 			return esp8266_ret;
@@ -991,16 +1054,19 @@ static int findDataBlockEnd(int offset){
 
 
 static void selectGameScreenLogic(){
-
+	//Go back to main menu
 	if (uInput.keyA == GPIO_PIN_RESET) {
 		screen = MAIN_MENU_SCREEN;
 		HAL_GPIO_WritePin(ESP_EN_GPIO_Port, ESP_EN_Pin, GPIO_PIN_RESET); //Disable ESP8266
 		drawMainMenu();
 		updateSelectedOption(selected_menu_option);
 	}
+	//Select game and download it
 	if (uInput.keyB == GPIO_PIN_RESET) {
 		downloadGame();
 	}
+
+	/*MOVE THROUGH OPTIONS*/
 	if (uInput.keyDown == GPIO_PIN_RESET && uInput.keyDown != uInputOld.keyDown) {
 		if (selected_game < nr_of_games) {
 			selected_game++;
